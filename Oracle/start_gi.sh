@@ -7,9 +7,10 @@
 export OHGRID=/u01/app/19.0.0.0/grid
 export ORACLE_HOME=$OHGRID
 export ORACLE_BASE=$($ORACLE_HOME/bin/orabase)
-export PATCHDR=/u01/stage/patches/jul_2021/19.12.0.0.210720
-export SCRIPTS=/u01/stage/patches/jul_2021/scripts
-export LOGDIR=/u01/stage/patches/jul_2021/apply_logs
+export STGDIR=/u01/stage/patches/jan_2022
+export PATCHDR=$STGDIR/19.14.0.0.0
+export SCRIPTS=$STGDIR/scripts
+export LOGDIR=$STGDIR/apply_logs
 export DATE=`date +%m%d%Y_%H%M`
 export RPT=$LOGDIR/report_$DATE.txt
 
@@ -26,14 +27,20 @@ fi
 
 ## GI Patches
 
-GIRU=32895426
+GIRU=33509923
 
-MAIN_LST=32904851,32916816,32915586,32918050,32585572
+MAIN_LST=33515361,33529556,33534448,33239955,33575402
 
-ROLLBK_LST=30118419
+ROLLBK_LST=
 ONEOFF_LST=
 
-## Script Start
+if [ ! -d ${LOGDIR} ]; then echo "creating log dir"; mkdir $LOGDIR; chmod 777 $LOGDIR; fi
+
+echo "+++++++++++++++++++++++++++++++++++++++++++++++++ RPT +++++++++++++++++++++++++++++++++++++++++++++++++" > $RPT
+echo "Patch Summary $DATE" >> $RPT
+
+
+## Functions
 
 check_gi_location() {
 
@@ -47,13 +54,6 @@ if [ "$GIHOME" != "$OHGRID" ]; then
 fi
 
 }
-
-if [ ! -d ${LOGDIR} ]; then echo "creating log dir"; mkdir $LOGDIR; chmod 777 $LOGDIR; fi
-
-echo "+++++++++++++++++++++++++++++++++++++++++++++++++ RPT +++++++++++++++++++++++++++++++++++++++++++++++++" > $RPT
-echo "Patch Summary $DATE" >> $RPT
-
-# Functions
 
 check_current_patches() {
 
@@ -364,6 +364,8 @@ bundle_homes(){
   fi
 
 }
+
+### Script Execution
 
 
 if [ "$1" == "ohomes" ]; then
