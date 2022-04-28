@@ -1,15 +1,85 @@
 #!/bin/bash
-export ORACLE_HOME=/u01/app/oracle/product/12.2.0.1/dbhome_1
+#set -x
+export ORACLE_HOME=/u01/app/oracle/product/anthem/12.2.0.1.220118
 export PATH=$ORACLE_HOME/bin:$ORACLE_HOME/OPatch:$PATH
+export STGDIR=/u01/stage/patches/jan_2022
+export PATCHDR=$STGDIR/12.2.0.1.0
+export SCRIPTS=$STGDIR/scripts
+export LOGDIR=$STGDIR/apply_logs
+# CheckSum
+export SRCCHKSUM=$SCRIPTS/ohome_122.sum
+export DSTCHKSUM=$LOGDIR/ohome_122.sum
+# OPatch
+export MIMOPATCH='12.2.0.1.28'
+export OPATCHFILE=$STGDIR/p6880880_122010_Linux-x86-64.zip
+
+run_patch(){
+
+printf "\n - Rollback. \n\n"
+opatch nrollback -id 29903357 -silent -local -oh $ORACLE_HOME
+opatch nrollback -id 28332319 -silent -local -oh $ORACLE_HOME
+
+$PATCHDR/33583921/33678030/custom/scripts/prepatch.sh -dbhome $ORACLE_HOME
+
+printf "\n - Apply Main. \n\n"
+opatch apply -silent -local -oh $ORACLE_HOME $PATCHDR/33583921/33587128
+opatch apply -silent -local -oh $ORACLE_HOME $PATCHDR/33583921/33678030
+
+$PATCHDR/33583921/33678030/custom/scripts/postpatch.sh -dbhome $ORACLE_HOME
+
+printf "\n - Apply OneOff. \n\n"
+opatch apply -silent -local -oh $ORACLE_HOME $PATCHDR/oneoff/29903357
+opatch apply -silent -local -oh $ORACLE_HOME $PATCHDR/oneoff/28332319
+
+
+}
+
+opatch_ver(){
+
+CUROPATCH=$($ORACLE_HOME/OPatch/opatch version | head -1 | awk -F":" '{print $NF}' | xargs)
+
+if [ $MIMOPATCH == $CUROPATCH ]; then
+   printf "\n - OPatch version OK! \n\n"
+else
+   printf "\n - Updating OPatch! \n\n"
+   unzip -qo $OPATCHFILE -d $ORACLE_HOME
+   if [ $? -ne 0 ]; then
+      printf "\n - Update failed, check logs! \n\n"
+      exit 1
+   fi
+   $ORACLE_HOME/OPatch/opatch version | head -1
+fi
+
+}
+
 
 run_checksum(){
 
-PATCH_SHA1SUM=`opatch lspatches -oh $ORACLE_HOME | sort | cut -f1 -d ";" | sha1sum | cut -d ' ' -f 1`
+printf "\n - Running Patch Checksum. \n\n"
 
-if [ "$PATCH_SHA1SUM" == "3766ff327ef2af8b4015c0e9dc71cd59e54f85ff" ] ; then
-  printf "Patches match\n" ;
+opatch lspatches -oh $ORACLE_HOME | sort | cut -f1 -d ";" | sha1sum > $DSTCHKSUM
+
+# run checksum againts expected file
+
+if [ -f $SRCCHKSUM ]; then
+
+   diff $SRCCHKSUM $DSTCHKSUM
+
+   if [ $? -eq 0 ] ; then
+     printf "\n - Patches match\n\n";
+   else
+     printf "\n - No match\n\n";
+     opatch lspatches -oh $ORACLE_HOME | sort
+   fi
+
 else
-  printf "No match\n Patch checksum is $PATCH_SHA1SUM but should be 3766ff327ef2af8b4015c0e9dc71cd59e54f85ff \n" ;
+   
+   printf "\n - Checksum file not found, if this is the first time you run this script,\n"
+   echo " - check if the patches math manually and you can use"
+   echo " - the file created at $DSTCHKSUM as source."
+
+   opatch lspatches -oh $ORACLE_HOME | sort
+
 fi
 
 }
@@ -20,19 +90,8 @@ run_checksum
 
 else
 
-/u01/stage/patches/jul_2021/12.2.0.1.210720/32928749/31802727/custom/scripts/prepatch.sh -dbhome $ORACLE_HOME
-opatch nrollback -id 28332319 -silent -local -oh $ORACLE_HOME
-opatch nrollback -id 29903357 -silent -local -oh $ORACLE_HOME
-opatch apply -silent -local -oh $ORACLE_HOME /u01/stage/patches/jul_2021/12.2.0.1.210720/32928749/32916808
-opatch apply -silent -local -oh $ORACLE_HOME /u01/stage/patches/jul_2021/12.2.0.1.210720/32928749/31802727
-/u01/stage/patches/jul_2021/12.2.0.1.210720/32928749/31802727/custom/scripts/postpatch.sh -dbhome $ORACLE_HOME
-
-
-opatch apply -silent -local -oh $ORACLE_HOME /u01/stage/patches/jul_2021/12.2.0.1.210720/oneoff/28332319
-opatch apply -silent -local -oh $ORACLE_HOME /u01/stage/patches/jul_2021/12.2.0.1.210720/oneoff/29903357
-
-opatch lspatches -oh $ORACLE_HOME
-
+opatch_ver
+run_patch
 run_checksum
 
 fi

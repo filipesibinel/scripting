@@ -1,18 +1,95 @@
 #!/bin/bash
-export ORACLE_HOME=/u01/app/oracle/product/19.0.0.0/dbhome_1
+#set -x
+
+export ORACLE_HOME=/u01/app/oracle/product/anthem/19.0.0.0.220118
 export PATH=$ORACLE_HOME/bin:$ORACLE_HOME/OPatch:$PATH
+export STGDIR=/u01/stage/patches/jan_2022
+export PATCHDR=$STGDIR/19.14.0.0.0
+export SCRIPTS=$STGDIR/scripts
+export LOGDIR=$STGDIR/apply_logs
+# CheckSum
+export SRCCHKSUM=$SCRIPTS/ohome_19.sum
+export DSTCHKSUM=$LOGDIR/ohome_19.sum
+# OPatch
+export MIMOPATCH='12.2.0.1.28'
+export OPATCHFILE=$STGDIR/p6880880_122010_Linux-x86-64.zip
 
-run_checksum(){
+run_patch(){
 
-PATCH_SHA1SUM=`opatch lspatches -oh $ORACLE_HOME | sort | cut -f1 -d ";" | sha1sum | cut -d ' ' -f 1`
+$PATCHDR/33509923/33529556/custom/scripts/prepatch.sh -dbhome $ORACLE_HOME
 
-if [ "$PATCH_SHA1SUM" == "423e5f3ecc8d518f2de89a53492094f14fd3a998" ] ; then
-  printf "Patches match\n" ;
+printf "\n - Rollback. \n\n"
+#opatch rollback -silent -local -oh $ORACLE_HOME -id 31632548
+opatch nrollback -silent -local -oh $ORACLE_HOME -id 31002346,33450168,33278133,32827206,27155644,32897184,31602782,33144001,33633351
+opatch nrollback -silent -local -oh $ORACLE_HOME -id 31632548,32904851
+
+printf "\n - Apply Main. \n\n"
+opatch apply -silent -local -oh $ORACLE_HOME $PATCHDR/33509923/33515361
+opatch apply -silent -local -oh $ORACLE_HOME $PATCHDR/33509923/33529556
+
+printf "\n - Apply OneOff. \n\n"
+opatch apply -silent -local -oh $ORACLE_HOME $PATCHDR/oneoff/31632548
+
+
+POST_SCPT="$PATCHDR/33509923/33529556/custom/scripts/postpatch.sh"
+
+if [ -f $${POST_SCPT} ]; then
+   $POST_SCPT -dbhome $ORACLE_HOME
+fi
+
+opatch lspatches -oh $ORACLE_HOME | sort
+
+}
+
+opatch_ver(){
+
+CUROPATCH=$($ORACLE_HOME/OPatch/opatch version | head -1 | awk -F":" '{print $NF}' | xargs)
+
+if [ $MIMOPATCH == $CUROPATCH ]; then
+   printf "\n - OPatch version OK! \n\n"
 else
-  printf "No match\n Patch checksum is $PATCH_SHA1SUM but should be 423e5f3ecc8d518f2de89a53492094f14fd3a998 \n" ;
+   printf "\n - Updating OPatch! \n\n"
+   unzip -qo $OPATCHFILE -d $ORACLE_HOME
+   if [ $? -ne 0 ]; then
+      printf "\n - Update failed, check logs! \n\n"
+      exit 1
+   fi
+   $ORACLE_HOME/OPatch/opatch version | head -1
 fi
 
 }
+
+run_checksum(){
+
+printf "\n - Running Patch Checksum. \n\n"
+
+opatch lspatches -oh $ORACLE_HOME | sort | cut -f1 -d ";" | sha1sum > $DSTCHKSUM
+
+# run checksum againts expected file
+
+if [ -f $SRCCHKSUM ]; then
+
+   diff $SRCCHKSUM $DSTCHKSUM
+
+   if [ $? -eq 0 ] ; then
+     printf "\n - Patches match\n\n";
+   else
+     printf "\n - No match\n\n";
+     opatch lspatches -oh $ORACLE_HOME | sort
+   fi
+
+else
+   
+   printf "\n - Checksum file not found, if this is the first time you run this script,\n"
+   echo " - check if the patches math manually and you can use"
+   echo " - the file created at $DSTCHKSUM as source."
+
+   opatch lspatches -oh $ORACLE_HOME | sort
+
+fi
+
+}
+
 
 if [ "$1" == checksum ]; then
 
@@ -20,23 +97,8 @@ run_checksum
 
 else
 
-/u01/stage/patches/jul_2021/19.12.0.0.210720/32895426/32904851/custom/scripts/prepatch.sh -dbhome $ORACLE_HOME
-opatch rollback -silent -local -oh $ORACLE_HOME -id 31602782
-opatch apply -silent -local -oh $ORACLE_HOME /u01/stage/patches/jul_2021/19.12.0.0.210720/32895426/32916816
-mv /u01/app/oracle/product/19.0.0.0/dbhome_1/rdbms/admin/preupgrade.jar /u01/app/oracle/product/19.0.0.0/dbhome_1/rdbms/admin/preupgrade.jar.old
-opatch apply -silent -local -oh $ORACLE_HOME /u01/stage/patches/jul_2021/19.12.0.0.210720/32895426/32904851
-opatch apply -silent -local -oh $ORACLE_HOME /u01/stage/patches/jul_2021/19.12.0.0.210720/oneoff/31602782
-opatch apply -silent -local -oh $ORACLE_HOME /u01/stage/patches/jul_2021/19.12.0.0.210720/oneoff/32897184
-opatch apply -silent -local -oh $ORACLE_HOME /u01/stage/patches/jul_2021/19.12.0.0.210720/oneoff/31632548
-
-POST_SCPT="/u01/stage/patches/jul_2021/19.12.0.0.210720/32895426/32904851/custom/scripts/postpatch.sh"
-
-if [ -f $${POST_SCPT} ]; then
-   $POST_SCPT
-fi
-
-opatch lspatches -oh $ORACLE_HOME
-
+opatch_ver
+run_patch
 run_checksum
 
 fi
