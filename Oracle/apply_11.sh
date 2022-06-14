@@ -1,6 +1,5 @@
 #!/bin/bash
-#export ORACLE_HOME=/u01/app/oracle/product/11.2.0.4/dbhome_1
-export ORACLE_HOME=/u01/app/oracle/product/anthem/11.2.0.4.220118
+export ORACLE_HOME=/u01/app/oracle/product/11.2.0.4/dbhome_1
 export PATH=$ORACLE_HOME/bin:$ORACLE_HOME/OPatch:$PATH
 export STGDIR=/u01/stage/patches/jan_2022
 export PATCHDR=$STGDIR/11.2.0.4.0
@@ -12,6 +11,11 @@ export DSTCHKSUM=$LOGDIR/ohome_11.sum
 # OPatch
 export MIMOPATCH='11.2.0.3.33'
 export OPATCHFILE=$STGDIR/p6880880_112000_Linux-x86-64.zip
+
+if [ $USER == "root" ]; then
+   printf "\n - DO NOT Execute this with root!\n\n";
+   exit 1;
+fi
 
 
 run_patch(){
