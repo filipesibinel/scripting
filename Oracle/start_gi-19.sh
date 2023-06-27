@@ -4,11 +4,11 @@
 
 #echo ${PIPESTATUS[0]}
 
-export OHGRID=/u01/app/oracle/product/anthem/grid.19.0.0.0.220118
+export OHGRID=/u01/app/19.0.0.0/grid
 export ORACLE_HOME=$OHGRID
 export ORACLE_BASE=$($ORACLE_HOME/bin/orabase)
-export STGDIR=/u01/stage/patches/jan_2022
-export PATCHDR=$STGDIR/19.14.0.0.0
+export STGDIR=/u01/stage/patches/oct.2022
+export PATCHDR=$STGDIR/19.17.0.0
 export SCRIPTS=$STGDIR/scripts
 export LOGDIR=$STGDIR/apply_logs
 export DATE=`date +%m%d%Y_%H%M`
@@ -17,10 +17,15 @@ export RPT=$LOGDIR/report_$DATE.txt
 export SRCCHKSUM=$SCRIPTS/gihome_19.sum
 export DSTCHKSUM=$LOGDIR/gihome_19.sum
 # OPatch
-export MIMOPATCH='12.2.0.1.28'
-export OPATCHFILE=$STGDIR/p6880880_122010_Linux-x86-64.zip
+export MIMOPATCH='12.2.0.1.32'
+export OPATCHFILE=$PATCHDR/p6880880_122010_Linux-x86-64.zip
+export OPT_SEL=$1
 
 GI_USER=oracle
+
+if [ -z $OPT_SEL ]; then
+   OPT_SEL=help
+fi
 
 if [ $USER != "root" ]; then
    printf "\n - Execute this with root!\n\n";
@@ -36,9 +41,9 @@ fi
 
 ## GI Patches
 
-GIRU=33509923
+GIRU=34416665
 
-MAIN_LST=33515361,33529556,33534448,33239955,33575402
+MAIN_LST=34419443,34444834,34428761,34580338,33575402
 
 ROLLBK_LST=
 ONEOFF_LST=
@@ -139,8 +144,8 @@ if [ -z $MAIN_FINAL ]; then
       printf "\n - Starting main patch ${main} on $OHGRID \n   logfile ${MAIN_LOG}.log\n\n" | tee -a $RPT
       time su $GI_USER -c "env ORACLE_HOME=$OHGRID $OHGRID/OPatch/opatch apply -oh $OHGRID -silent -local $PATCHDR/${GIRU}/${main} 2> ${MAIN_LOG}.err 1> ${MAIN_LOG}.log"
       MAIN_CHK1=$(grep -i "patch ${main} successfully applied." ${MAIN_LOG}.log | wc -l)
-      
-      if [ $MAIN_CHK1 -eq 1 ]; then 
+
+      if [ $MAIN_CHK1 -eq 1 ]; then
         printf "\n - Main Patch ${main} applied on $OHGRID!\n\n" | tee -a $RPT
       else
         printf "\n - Check logs for patch ${main} at ${MAIN_LOG}.log!\n\n" | tee -a $RPT
@@ -167,7 +172,7 @@ check_oracle_proc() {
       if [ $chk_files -ne 0 ]; then printf "\n - $chk_files files are still in use, please check oracle processes\n\n" | tee -a $RPT; cleanup; else printf "\n - check openfiles completed\n\n" | tee -a $RPT; fi
     done
 fi
-  
+
 
 }
 
@@ -177,7 +182,7 @@ for home in $v_ohomes; do
   if [ -d $home ]; then
      v_ohome_owner=$(stat -c '%U' $home)
      lsof $home/bin/oracle 2> /dev/null 1> /dev/null
-     if [ $? -eq 1 ]; then 
+     if [ $? -eq 1 ]; then
         if [ $(lsof -u $v_ohome_owner | grep -i $home | wc -l) -gt 0 ]; then
           echo "$home has the following programs running, killing:" | tee -a $RPT
           lsof -u $v_ohome_owner | grep -i $home | awk '{print $1}' | sort | uniq
@@ -241,14 +246,14 @@ for home in $v_ohomes; do
          fi
        fi
      fi
-   fi     
+   fi
 done
 
 }
 
 
 rollback_patches() {
-  
+
   if [ -z $ROLLBACK_FINAL ]; then
     printf "\n - No patches to rollback!\n\n" | tee -a $RPT
   else
@@ -262,19 +267,19 @@ rollback_patches() {
       ROL_CHK2=$(grep -i "Following patches are not present in the Oracle Home" ${RLOG}.log | wc -l)
 
 
-      if [ $ROL_CHK1 -ne 0 ] && [ $ROL_CHK2 -eq 1 ]; then 
+      if [ $ROL_CHK1 -ne 0 ] && [ $ROL_CHK2 -eq 1 ]; then
         printf "\n - Patch ${rolback_id} not preset on home!\n\n" | tee -a $RPT
       elif [ $ROL_CHK1 -ne 0 ]; then
         echo ${rolback_id}.err | tee -a $RPT
       else
         printf "\n - Patch ${rolback_id} removed\n\n" | tee -a $RPT
       fi
-    
+
     done
-    
+
     printf "\n - Check rollbacklogs sleeping 60!\n\n" | tee -a $RPT
     sleep 60
-    
+
   fi
 }
 
@@ -300,7 +305,7 @@ close_patch() {
 
     echo "running postpatch script" | tee -a $RPT
     su $GI_USER -c "$OHGRID/OPatch/opatch lspatches"
-    $OHGRID/crs/install/rootcrs.sh -postpatch 
+    $OHGRID/crs/install/rootcrs.sh -postpatch
     su $GI_USER -c "env ORACLE_HOME=$OHGRID  $OHGRID/bin/crsctl query crs activeversion -f" | tee -a $RPT
     cat $RPT
 
@@ -341,7 +346,7 @@ PPATCH_FAIL='FAIL'
 if [ -z ${PPATCH_LOG} ]; then
   echo "Executing prepatch!" | tee -a $RPT
   export SKIP_PPATCH=FALSE
-else  
+else
   PPATCH_OUT=$(grep --binary-files=text ROOTCRS_PREPATCH $PPATCH_LOG | tail -1 | awk '{print $NF}')
 
   if [[ "$PPATCH_OUT" =~ .*"$PPATCH_SCSS".* ]]; then
@@ -374,9 +379,9 @@ if [ -f $SRCCHKSUM ]; then
    diff $SRCCHKSUM $DSTCHKSUM
 
    if [ $? -eq 0 ] ; then
-     printf "Patches match\n";
+     printf "\n - Patches match\n\n";
    else
-     printf "No match\n";
+     printf "\n - No match\n\n";
      echo " "
      cat $DSTCHKSUM
      echo " "
@@ -384,7 +389,7 @@ if [ -f $SRCCHKSUM ]; then
    fi
 
 else
-   
+
    echo "Checksum file not found, if this is the first time you run this script,"
    echo "check if the patches math manually and you can use"
    echo "the file created at $DSTCHKSUM as source!"
@@ -433,29 +438,29 @@ bundle_homes(){
 ### Script Execution
 
 
-if [ "$1" == "ohomes" ]; then
+if [ "$OPT_SEL" == "ohomes" ]; then
 
 printf "\n - Only running dbhome scripts!\n\n" | tee -a $RPT
 bundle_homes
 cat $RPT
 
-elif [ "$1" == "close" ]; then
+elif [ "$OPT_SEL" == "close" ]; then
 
-close_patch  
+close_patch
 
-elif [ "$1" == "checksum" ]; then
-  
+elif [ "$OPT_SEL" == "checksum" ]; then
+
 check_checksum
 
-elif [ "$1" == "no_ohomes" ]; then
+elif [ "$OPT_SEL" == "gihome" ]; then
 
 printf "\n - Only running GI Patch!\n\n" | tee -a $RPT
 
-#check_gi_location
+check_gi_location
 opatch_ver
 check_current_patches
-#check_prepatch
-#run_prepatch
+check_prepatch
+run_prepatch
 check_oracle_proc
 rollback_patches
 apply_main
@@ -466,21 +471,22 @@ echo " " | tee -a $RPT
 
 prompt_close
 
-elif [ "$1" == "--help" ] || [ "$1" == "help" ] || [ "$1" == "-h" ]; then
+elif [ "$OPT_SEL" == "--help" ] || [ "$OPT_SEL" == "help" ] || [ "$OPT_SEL" == "-h" ]; then
 
 echo "use only one of the bellow options"
 echo " "
-echo "use list to list db homes"
-echo "use ohomes to patch db homes"
-echo "use close to run postpatch"
-echo "use checksum to validate patch"
-echo "use no_ohomes to patch only GI"
+echo "use - all - to patch gi and db homes"
+echo "use - list - to list db homes"
+echo "use - checksum - to validate patch"
+echo "use - gihome - to patch only GI"
+echo "use - ohomes - to patch db homes"
+echo "use - close - to run postpatch"
 
-elif [ "$1" == "list" ]; then
+elif [ "$OPT_SEL" == "list" ]; then
 
 find_dbhomes
 
-else
+elif [ "$OPT_SEL" == "all" ]; then
 
 printf "\n - Running GI and DB Home Patch!\n\n" | tee -a $RPT
 
@@ -501,4 +507,8 @@ echo " " | tee -a $RPT
 
 prompt_close
 
+else
+  printf "\n - Doing Nothing!\n\n"
+
 fi
+

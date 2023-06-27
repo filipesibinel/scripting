@@ -1,7 +1,7 @@
 #!/bin/bash
 
 USR_HOME=/export/home/oracle
-WRK_DIR=$USR_HOME/enkitec/jul_2021
+WRK_DIR=$USR_HOME/enkitec/jul_2022
 OLD_PATH=$PATH
 
 OS=$(uname)
@@ -24,7 +24,10 @@ v_ohomes=$(cat ${v_inv_loc}/ContentsXML/inventory.xml | grep -vi removed | grep 
 arr_homes=($v_ohomes)
 
 for homes in $v_ohomes; do
-  echo "the following home was found: $homes"
+  if [ -d $homes ]; then
+     v_owner=$(stat -c '%U' $homes)
+     echo "the following home was found: $homes owned by ${v_owner}" | tee -a $RPT
+  fi
 done
 
 }
@@ -107,7 +110,7 @@ for node in "${!arr_node[@]}"; do
      echo "srvctl start home -o $home -s $WRK_DIR/state_db${node_num}_homeid${v_home_idx}.txt -n ${arr_node[$node]}"
      echo " "
    done >> $WRK_DIR/$script_name
-   
+
    echo "ssh ${arr_node[$node]} \"ps -ef | grep -i ora_[p]mon\" | awk '{print \$8}' | sort > $WRK_DIR/after_db$node_num.txt" >> $WRK_DIR/$script_name
    echo "diff $WRK_DIR/before_db$node_num.txt $WRK_DIR/after_db$node_num.txt" >> $WRK_DIR/$script_name
    chmod +x $WRK_DIR/$script_name
